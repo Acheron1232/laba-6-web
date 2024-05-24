@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+
+    #result-container {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      width: 90%;
+      max-width: 600px;
+      margin: 20px;
+      padding: 20px;
+    }
+
+    #form-container {
+      margin-bottom: 20px;
+    }
+
+    .input-group {
+      margin-bottom: 20px;
+    }
+
+    .input-group label {
+      display: block;
+      margin-bottom: 10px;
+      color: #555;
+    }
+
+    .input-group input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+
+    button {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #218838;
+    }
+
+    #result {
+      margin-top: 20px;
+    }
+
+    #result h1 {
+      font-size: 20px;
+      color: #333;
+    }
+
+    #result p {
+      color: #555;
+      line-height: 1.6;
+    }
+
+    em {
+      font-style: italic;
+      color: #000;
+    }
+
+    sub {
+      font-size: 0.75em;
+    }
+
+  </style>
+</head>
+<body>
+<div id="result-container">
+  <div id="form-container">
+    <fieldset class="input-group">
+      <label for="standard_deviation1">
+        Середньоквадратичне відхилення, <em>σ<sub>1</sub></em> (МВт):
+        <input id="standard_deviation1" name="standard_deviation1" type="number"/>
+      </label>
+      <label for="average_daily_power">
+        Середньодобова потужність, <em>P<sub>с</sub></em> (МВт):
+        <input id="average_daily_power" name="average_daily_power" type="number"/>
+      </label>
+      <label for="standard_deviation2">
+        Середньоквадратичне відхилення, <em>σ<sub>2</sub></em> (МВт):
+        <input id="standard_deviation2" name="standard_deviation2" type="number"/>
+      </label>
+      <label for="cost_of_electricity">
+        Вартість електроенергії, <em>В</em> (грн / кВт • год):
+        <input id="cost_of_electricity" name="cost_of_electricity" type="number"/>
+      </label>
+      <button onclick="calculate()">Розрахувати</button>
+    </fieldset>
+  </div>
+  <div id="result"></div>
+</div>
+<script>
+  const delta = 0.05;
+
+  class WebCalculator {
+    constructor(delta, Pc, Ds1, Ds2, B) {
+      this.delta = delta;
+      this.Pc = Pc;
+      this.Ds1 = Ds1;
+      this.Ds2 = Ds2;
+      this.B = B;
+    }
+
+    integrand(p, Ds) {
+      const exponentPart = -((p - this.Pc) ** 2) / (2 * Ds ** 2);
+      return Math.exp(exponentPart) / (Ds * Math.sqrt(2 * Math.PI));
+    }
+
+    integrate(start, end, Ds, numIntervals = 200) {
+      const step = (end - start) / numIntervals;
+      let sum = 0.5 * (this.integrand(start, Ds) + this.integrand(end, Ds));
+      for (let i = 1; i < numIntervals; i++) {
+        const p = start + i * step;
+        sum += this.integrand(p, Ds);
+      }
+      return sum * step;
+    }
+
+    calculateResults() {
+      const start = this.Pc - this.Pc * this.delta;
+      const end = this.Pc + this.Pc * this.delta;
+
+      const deltaW1 = this.integrate(start, end, this.Ds1);
+      const W1 = this.Pc * 24 * deltaW1;
+      const P1 = W1 * this.B;
+      const W2 = this.Pc * 24 * (1 - deltaW1);
+      const Sh1 = W2 * this.B;
+      const profit1 = P1 - Sh1;
+
+      const deltaW2 = this.integrate(start, end, this.Ds2);
+      const W3 = this.Pc * 24 * deltaW2;
+      const P2 = W3 * this.B;
+      const W4 = this.Pc * 24 * (1 - deltaW2);
+      const Sh2 = W4 * this.B;
+      const profit2 = P2 - Sh2;
+
+      return { deltaW1, W1, P1, W2, Sh1, profit1, deltaW2, W3, P2, W4, Sh2, profit2 };
+    }
+  }
+
+  function calculate() {
+    const Pc = parseFloat(document.getElementById('average_daily_power').value);
+    const Ds1 = parseFloat(document.getElementById('standard_deviation1').value);
+    const Ds2 = parseFloat(document.getElementById('standard_deviation2').value);
+    const B = parseFloat(document.getElementById('cost_of_electricity').value);
+
+    const calculator = new WebCalculator(delta, Pc, Ds1, Ds2, B);
+    const results = calculator.calculateResults();
+
+    const resultDiv = document.getElementById('result');
+    resultDiv.innerHTML = `
+      <p>Прибуткова електроенергія: <em>W<sub>1</sub></em> = ${results.W1.toFixed(2)} МВт • год;</p>
+      <p>Частка енергії що генерується до небалансів: <em>δ<sub>W1</sub></em> = ${(results.deltaW1 * 100).toFixed(2)} %;</p>
+      <p>Штрафна електроенергія: <em>W<sub>2</sub></em> = ${results.W2.toFixed(2)} МВт • год;</p>
+      <p>Прибуток (<em>П<sub>1</sub></em> - <em>Ш<sub>1</sub></em> = <em>прибуток</em>): ${results.P1.toFixed(2)} - ${results.Sh1.toFixed(2)} = ${results.profit1.toFixed(2)} тис. грн.</p>
+      <p>Частка енергії що генерується до небалансів (після вдосконалення): <em>δ<sub>W2</sub></em> = ${(results.deltaW2 * 100).toFixed(2)} %;</p>
+      <p>Прибуткова електроенергія (після вдосконалення): <em>W<sub>3</sub></em> = ${results.W3.toFixed(2)} МВт • год;</p>
+      <p>Штрафна електроенергія (після вдосконалення): <em>W<sub>4</sub></em> = ${results.W4.toFixed(2)} МВт • год;</p>
+      <p>Прибуток (<em>П<sub>2</sub></em> - <em>Ш<sub>2</sub></em> = <em>прибуток після вдосконалення</em>): ${results.P2.toFixed(2)} - ${results.Sh2.toFixed(2)} = ${results.profit2.toFixed(2)} тис. грн.</p>
+    `;
+  }
+</script>
+</body>
+</html>
